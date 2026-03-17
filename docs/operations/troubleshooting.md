@@ -197,6 +197,16 @@ docker compose build --no-cache
 
 ## MCP 模式问题
 
+### stdio 模式退出后进程挂起
+
+**症状**：使用 Codex CLI 等 stdio MCP 客户端时，执行 `/exit` 后终端提示符不返回，需要手动 `Ctrl+C`
+
+**原因**：v2.12.0 之前版本未监听 stdin 关闭事件，且 `stop()` 未释放 transport 资源
+
+**解决方案**：
+1. 升级到 v2.12.0 或更高版本（已修复）
+2. 如果仍有问题，检查是否使用了自定义的进程包装器阻止了 stdin EOF 传递
+
 ### Claude Desktop 无法连接
 
 **排查步骤**：

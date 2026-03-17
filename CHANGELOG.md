@@ -2,6 +2,19 @@
 
 本文档记录 Universal DB MCP 的版本更新历史。
 
+## [2.13.0] - 2026
+
+### 修复
+
+- **stdio 进程优雅退出** - 修复 stdio MCP server 在客户端（如 Codex CLI）关闭会话后进程挂起的问题
+  - **问题表现**：Codex CLI 执行 `/exit` 后终端提示符不返回，必须手动 `Ctrl+C`
+  - **根因**：未监听 `process.stdin` 的 `end`/`close` 事件；`stop()` 方法未调用 `server.close()` 释放 transport 资源
+  - **修复方案**：
+    - `mcp-server.ts`：`stop()` 中新增 `server.close()` 调用，释放 stdin/stdout 监听器
+    - `mcp-index.ts`：新增统一 `gracefulShutdown()` 函数，监听 `SIGINT`/`SIGTERM`/`stdin end`/`stdin close`
+    - 防重入保护（`shuttingDown` 标志）+ 5 秒超时兜底
+  - **影响范围**：stdio 模式直接修复；SSE/Streamable HTTP 模式间接受益（`cleanupSession()` 调用的 `stop()` 现在正确关闭 MCP Server）
+
 ## [2.12.0] - 2026
 
 ### 修复

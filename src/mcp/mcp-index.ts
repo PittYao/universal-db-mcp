@@ -91,18 +91,39 @@ export async function startMcpServer(): Promise<void> {
         server.setAdapter(adapter);
         await server.start();
 
-        // Graceful shutdown
-        process.on('SIGINT', async () => {
-          console.error('\n⏹️  收到退出信号，正在关闭服务器...');
-          await server.stop();
-          process.exit(0);
-        });
+        // 统一的 graceful shutdown（防重入 + 超时保护）
+        let shuttingDown = false;
 
-        process.on('SIGTERM', async () => {
-          console.error('\n⏹️  收到终止信号，正在关闭服务器...');
-          await server.stop();
-          process.exit(0);
-        });
+        async function gracefulShutdown(reason: string): Promise<void> {
+          if (shuttingDown) return;
+          shuttingDown = true;
+
+          console.error(`\n⏹️  正在关闭服务器 (${reason})...`);
+
+          try {
+            await Promise.race([
+              server.stop(),
+              new Promise<void>((resolve) => setTimeout(() => {
+                console.error('⚠️  关闭超时，强制退出');
+                resolve();
+              }, 5000)),
+            ]);
+          } catch (err) {
+            console.error('关闭过程中出错:', err instanceof Error ? err.message : String(err));
+          } finally {
+            process.exit(0);
+          }
+        }
+
+        // 信号处理
+        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+        // stdin 关闭处理（核心修复）
+        // 当 MCP 客户端（如 Codex CLI）关闭 stdin 管道时触发
+        process.stdin.resume();
+        process.stdin.on('end', () => gracefulShutdown('stdin-end'));
+        process.stdin.on('close', () => gracefulShutdown('stdin-close'));
 
       } catch (error) {
         console.error('❌ 启动失败:', error instanceof Error ? error.message : String(error));

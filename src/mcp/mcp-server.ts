@@ -390,9 +390,19 @@ export class DatabaseMCPServer {
    * 停止服务器
    */
   async stop(): Promise<void> {
+    // 1. 关闭 MCP Server（释放 transport 层资源：stdin/stdout 监听器等）
+    try {
+      await this.server.close();
+    } catch (err) {
+      console.error('关闭 MCP Server 时出错:', err instanceof Error ? err.message : String(err));
+    }
+
+    // 2. 清理 Schema 缓存
     if (this.databaseService) {
       this.databaseService.clearSchemaCache();
     }
+
+    // 3. 断开数据库连接
     if (this.adapter) {
       await this.adapter.disconnect();
       console.error('👋 数据库连接已关闭');

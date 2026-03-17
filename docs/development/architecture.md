@@ -307,6 +307,33 @@ Claude Desktop → stdio → MCP Server → DatabaseService → Adapter → Data
 HTTP Client → REST API → Middleware → Routes → DatabaseService → Adapter → Database
 ```
 
+## 进程生命周期管理
+
+### stdio 模式
+
+stdio 模式下，进程退出由统一的 `gracefulShutdown()` 函数管理，覆盖以下退出场景：
+
+| 触发事件 | 说明 |
+|----------|------|
+| `SIGINT` | 用户按 Ctrl+C |
+| `SIGTERM` | 系统终止信号 |
+| `stdin end` | MCP 客户端关闭 stdin 管道（如 Codex CLI `/exit`） |
+| `stdin close` | stdin 流被完全销毁（`end` 的补充保障） |
+
+退出流程：`gracefulShutdown()` → `server.stop()`（关闭 MCP Server + 释放 transport + 断开数据库）→ `process.exit(0)`
+
+安全机制：
+- **防重入**：`shuttingDown` 标志确保多信号并发时只执行一次
+- **超时保护**：5 秒超时兜底，防止数据库断连挂起
+
+### HTTP 模式
+
+HTTP 模式由 Fastify 的 `onClose` 钩子管理，通过 `connectionManager.disconnectAll()` 清理所有会话。
+
+### SSE / Streamable HTTP
+
+SSE 和 Streamable HTTP 传输的会话清理通过 `cleanupSession()` → `server.stop()` 完成，`stop()` 内部会调用 `server.close()` 释放 transport 资源。
+
 ## 设计原则
 
 1. **关注点分离** - MCP 和 HTTP 模式各自独立，共享核心逻辑
