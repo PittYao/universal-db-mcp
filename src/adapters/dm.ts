@@ -43,6 +43,25 @@ async function loadDMDB() {
   }
 }
 
+export function buildDMConnectionConfig(config: {
+  host: string;
+  port: number;
+  user?: string;
+  password?: string;
+  database?: string;
+}): Record<string, unknown> {
+  return {
+    connectString: `${config.host}:${config.port || 5236}`,
+    user: config.user,
+    password: config.password,
+    // DM 的 schema 与用户名命名空间一致，优先使用 database 作为 schema
+    schema: config.database,
+    // 禁用消息加密以避免 OpenSSL 3.0 兼容性问题
+    cipherPath: '',
+    loginEncrypt: false,
+  };
+}
+
 export class DMAdapter implements DbAdapter {
   private connection: any = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -109,19 +128,7 @@ export class DMAdapter implements DbAdapter {
   async connect(): Promise<void> {
     try {
       const DM = await loadDMDB();
-
-      // 达梦数据库连接配置
-      const connectionConfig = {
-        host: this.config.host,
-        port: this.config.port || 5236, // 达梦默认端口
-        user: this.config.user,
-        password: this.config.password,
-        database: this.config.database,
-        // 禁用消息加密以避免 OpenSSL 3.0 兼容性问题
-        // 如果需要加密连接，请确保达梦数据库服务器配置了兼容的加密算法
-        cipherPath: '',
-        loginEncrypt: false,
-      };
+      const connectionConfig = buildDMConnectionConfig(this.config);
 
       this.connection = await DM.getConnection(connectionConfig);
       this.connectionConfig = connectionConfig;
